@@ -1831,6 +1831,27 @@ function injectBinshaoTheme() {
   document.head.appendChild(style)
 }
 
+// 禁用/卸载时摘掉本插件注入的暖纸主题：patch <style> 移除 + user-themes 记录里
+// 只删 binshao 一项（用户自建的其它主题不动）。若当前正用着 binshao，先切回 nous。
+function removeBinshaoTheme() {
+  document.getElementById(BINSHAO_PATCH_ID)?.remove()
+  try {
+    const raw = localStorage.getItem(USER_THEME_KEY)
+    if (!raw) return
+    const record = JSON.parse(raw)
+    if (record && Object.prototype.hasOwnProperty.call(record, 'binshao')) {
+      delete record.binshao
+      localStorage.setItem(USER_THEME_KEY, JSON.stringify(record))
+    }
+  } catch {}
+  try {
+    if (readThemeSkin() === 'binshao') {
+      writeThemeSkin('nous')
+      window.dispatchEvent(new StorageEvent('storage', { key: SKIN_GLOBAL_KEY }))
+    }
+  } catch {}
+}
+
 const SKIN_GLOBAL_KEY = 'hermes-desktop-theme-v2'
 const SKIN_RECORD_KEY = 'hermes-desktop-profile-themes-v1'
 const THEMES = [
@@ -3179,7 +3200,6 @@ export default {
         }
       } catch {}
       applyIntroMode(ctx.storage.get(INTRO_MODE_KEY, 'native'))
-      installIntroStorageHook()
       // 界面缩放走原生机制（window.hermesDesktop.zoom）。
       // 挂模块级常驻监听：与弹窗开关无关，保证 Settings / View 菜单 / Cmd± 改缩放时
       // 反向同步（哪怕 hub 弹窗此刻没开，下次打开也已是最新值）。
@@ -3193,11 +3213,15 @@ export default {
         void playCompletionCue().catch(() => {})
       })
 
+      // setItem 钩子最后再挂：它之前任一初始化抛错都会跳到 catch，此时 onDispose
+      // 尚未注册，钩子将无人还原——放末尾使安装与 onDispose 注册紧邻，窗口最小。
+      installIntroStorageHook()
       // 卸载/重载时清理注入，不留残留
       ctx.onDispose(() => {
         langObserver.disconnect()
         removePaper()
         removeFont()
+        removeBinshaoTheme()
         resetIntroOnDispose()
         if (typeof zoomUnsubscribeNative === 'function') zoomUnsubscribeNative()
         zoomUnsubscribeNative = null

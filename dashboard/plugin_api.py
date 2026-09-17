@@ -3,10 +3,15 @@
 桌面面板用 GET /fonts 填充字体下拉框(替代手工 FONTS 预设)。
 数据源:Windows 字体注册表(HKLM + HKCU),名字形如 "Maple UI (TrueType)",
 剥掉括号后缀后即 CSS font-family 家族名。
+非 Windows 平台无 winreg,返回空列表,前端回落 FONT_PRESETS 预设。
 """
 
 import re
-import winreg
+
+try:
+    import winreg
+except ImportError:  # Linux/macOS:无注册表,/fonts 返回空,前端用预设兜底
+    winreg = None
 
 from fastapi import APIRouter
 
@@ -20,6 +25,8 @@ _PAREN = re.compile(r"\s*\([^)]*\)\s*$")
 
 
 def _read_registry_fonts() -> set[str]:
+    if winreg is None:
+        return set()
     fonts: set[str] = set()
     for path in _FONT_KEY_PATHS:
         try:
