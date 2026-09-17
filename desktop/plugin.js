@@ -1028,6 +1028,9 @@ function readFontSettings() {
   const s = ctxRef ? ctxRef.storage : { get: () => undefined }
   const pick = (key, def, valid) => {
     const v = s.get(key, def)
+    // 显式空串 = 面板选了「跟随XX」档（'' 天然不在档位表里）→ 必须原样保留。
+    // 顶回 def 会让「跟随UI/跟随正文」静默变成硬编码档位（2026-09-17 修）。
+    if (v === '') return ''
     return valid && Array.isArray(valid) && !valid.includes(v) ? def : v
   }
   return {
@@ -1106,7 +1109,6 @@ let thinkTintTimer = null
 
 // 由当前设置生成全部字体 CSS（移植 ui-beautify renderCss，样式 id 用本插件专属）
 function renderFontCss(s) {
-  const px = Number(s.textSize) || 14
   const rules = []
   // UI 界面字体（全局 chrome：body 与 Tailwind --font-sans 都吃 --dt-font-sans。
   // 必须 !important：主题切换 applyTheme 以 inline style 重写该变量）
@@ -1131,8 +1133,14 @@ function renderFontCss(s) {
       FONT_SIZES.includes(s.codeSize) ? `${Number(s.codeSize)}px` : 'var(--conversation-text-font-size)'
     }!important}`
   )
-  // 正文字号：5 个会话变量（正文驱动 tool/caption 比例）
-  rules.push(`:root{--conversation-text-font-size:${px}px;--conversation-tool-font-size:${(px * FONT_RATIO.tool).toFixed(2)}px;--conversation-caption-font-size:${(px * FONT_RATIO.caption).toFixed(2)}px;--conversation-line-height:${(px * FONT_RATIO.line).toFixed(2)}px;--conversation-caption-line-height:${(px * FONT_RATIO.captionLine).toFixed(2)}px}`)
+  // 正文字号：档位=绝对 px（并由正文派生 tool/caption/行高 5 个会话变量）；
+  // 留空（「跟随UI」）= 不写任何 --conversation-* 规则 → 核心 :root 的 rem 定义
+  // （styles.css:474-478 的 0.8125rem 等）原样生效，随界面「基准」字号 --dt-base-size 一起缩放。
+  // ⚠️ 勿再用 px 兜底留空档：会压掉 rem 体系，基准改大而正文纹丝不动。
+  if (FONT_SIZES.includes(s.textSize)) {
+    const px = Number(s.textSize)
+    rules.push(`:root{--conversation-text-font-size:${px}px;--conversation-tool-font-size:${(px * FONT_RATIO.tool).toFixed(2)}px;--conversation-caption-font-size:${(px * FONT_RATIO.caption).toFixed(2)}px;--conversation-line-height:${(px * FONT_RATIO.line).toFixed(2)}px;--conversation-caption-line-height:${(px * FONT_RATIO.captionLine).toFixed(2)}px}`)
+  }
   // 标签栏字号（PaneTab 文字 span 硬编码 text-[9px]@pane-tab.tsx:227，容器 font-size 会被其直接声明无视，
   // 须命中内层文字 span：'group/tab' 容器 + 'truncate' 文字 token；留空 = 不覆盖）
   if (FONT_SIZES.includes(s.tabSize)) {
